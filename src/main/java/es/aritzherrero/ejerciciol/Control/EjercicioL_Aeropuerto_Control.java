@@ -1,4 +1,8 @@
 package es.aritzherrero.ejerciciol.Control;
+
+import es.aritzherrero.ejerciciol.DAO.AeropuertoDAO;
+import es.aritzherrero.ejerciciol.DAO.AeropuertoPrivadoDAO;
+import es.aritzherrero.ejerciciol.DAO.AeropuertoPublicoDAO;
 import es.aritzherrero.ejerciciol.DAO.AvionDAO;
 import es.aritzherrero.ejerciciol.Modelo.Aeropuerto;
 import es.aritzherrero.ejerciciol.Modelo.AeropuertoPrivado;
@@ -20,196 +24,243 @@ import javafx.stage.Window;
 
 import java.io.IOException;
 import java.net.URL;
-import java.util.Optional;
+import java.sql.SQLException;
 import java.util.ResourceBundle;
 
 /**
- * Controlador de la aplicación de gestión de aeropuertos.
+ * Controlador para la gestión de aeropuertos en la aplicación.
+ * Permite la visualización, edición, eliminación y adición de aeropuertos.
  */
 public class EjercicioL_Aeropuerto_Control implements Initializable {
-    @FXML private MenuItem menuBorrarAeropuerto;
-    @FXML private ToggleGroup rbGroup;
-    @FXML private RadioButton rbPublicos;
-    @FXML private RadioButton rbPrivados;
-    @FXML private TextField filtroNombre;
-    @FXML private MenuItem menuEditarAeropuerto;
-    @FXML private MenuItem menuInfoAeropuerto;
-    @FXML private TableView<Aeropuerto> tabla;
 
-    private final ObservableList<Aeropuerto> masterData = FXCollections.observableArrayList();
-    private final ObservableList<Aeropuerto> filteredData = FXCollections.observableArrayList();
+    @FXML
+    private TableView tabla;
+    @FXML
+    private TextField filtroNombre;
+    @FXML
+    private RadioButton rbPublicos;
+    @FXML
+    private RadioButton rbPrivados;
+    @FXML
+    private MenuItem menuEditarAeropuerto;
+    @FXML
+    private MenuItem menuBorrarAeropuerto;
+    @FXML
+    private MenuItem menuInfoAeropuerto;
+
+    private ObservableList<Object> masterData = FXCollections.observableArrayList();
+    private ObservableList<Object> filteredData = FXCollections.observableArrayList();
 
     /**
-     * Inicializa el controlador, configurando los listeners y cargando datos iniciales.
+     * Inicializa el controlador. Configura los listeners y carga los datos iniciales.
+     *
+     * @param url            URL para localizar recursos.
+     * @param resourceBundle El conjunto de recursos que contiene el controlador.
      */
     @Override
     public void initialize(URL url, ResourceBundle resourceBundle) {
-        setupTableSelectionListener();
-        setupRadioButtonListener();
-        setupFilterListener();
-        cargarPublicos();
-    }
+        tabla.getSelectionModel().selectedItemProperty().addListener((observable, oldVal, newVal) -> deshabilitarMenus(newVal == null));
 
-    /**
-     * Configura el listener para la selección de la tabla.
-     */
-    private void setupTableSelectionListener() {
-        tabla.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
-            deshabilitarMenus(newValue == null);
-        });
-    }
+        ToggleGroup grupoAeropuertos = new ToggleGroup();
+        rbPublicos.setToggleGroup(grupoAeropuertos);
+        rbPrivados.setToggleGroup(grupoAeropuertos);
 
-    /**
-     * Configura el listener para los botones de selección de aeropuerto.
-     */
-    private void setupRadioButtonListener() {
-        rbGroup.selectedToggleProperty().addListener((observable, oldBtn, newBtn) -> {
-            if (newBtn.equals(rbPublicos)) {
-                cargarPublicos();
-            } else {
-                cargarPrivados();
+        grupoAeropuertos.selectedToggleProperty().addListener((obs, oldToggle, newToggle) -> {
+            if (newToggle == rbPublicos) {
+                try {
+                    cargarPublicos();
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+            } else if (newToggle == rbPrivados) {
+                try {
+                    cargarPrivados();
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
             }
         });
+
+        filtroNombre.textProperty().addListener((observable, oldValue, newValue) -> filtrar());
     }
 
     /**
-     * Configura el listener para el campo de filtro de nombre.
+     * Muestra información sobre el aeropuerto seleccionado en una alerta.
+     *
+     * @param event Evento de acción.
+     * @throws SQLException si ocurre un error al acceder a la base de datos.
      */
-    private void setupFilterListener() {
-        filtroNombre.setOnKeyTyped(keyEvent -> filtrar());
+    @FXML
+    void infoAeropuerto(ActionEvent event) throws SQLException {
+        Object aeropuerto = tabla.getSelectionModel().getSelectedItem();
+        if (aeropuerto == null) {
+            alerta("Selecciona un aeropuerto antes de ver su información");
+            return;
+        }
+
+        String info = generarInfoAeropuerto(aeropuerto);
+
+        // Mostrar información en una alerta
+        Alert alerta = new Alert(Alert.AlertType.INFORMATION);
+        alerta.setHeaderText(null);
+        alerta.setTitle("Información");
+        alerta.setContentText(info);
+        alerta.showAndWait();
     }
 
     /**
-     * Añade un nuevo aeropuerto.
+     * Genera una cadena con la información detallada del aeropuerto.
+     *
+     * @param aeropuerto Objeto del aeropuerto seleccionado.
+     * @return La información formateada del aeropuerto.
+     * @throws SQLException si ocurre un error al acceder a la base de datos.
+     */
+    private String generarInfoAeropuerto(Object aeropuerto) throws SQLException {
+        StringBuilder info = new StringBuilder();
+
+        Aeropuerto airport = (aeropuerto instanceof AeropuertoPublico)
+                ? ((AeropuertoPublico) aeropuerto).getAeropuerto()
+                : ((AeropuertoPrivado) aeropuerto).getAeropuerto();
+
+        info.append("Nombre: ").append(airport.getNombre())
+                .append("\nPaís: ").append(airport.getDireccion().getPais())
+                .append("\nDirección: C\\ ").append(airport.getDireccion().getCalle()).append(" ")
+                .append(airport.getDireccion().getNumero()).append(", ").append(airport.getDireccion().getCiudad())
+                .append("\nAño de inauguración: ").append(airport.getAnio_inauguracion())
+                .append("\nCapacidad: ").append(airport.getCapacidad())
+                .append("\nAviones:");
+
+        ObservableList<Avion> aviones = AvionDAO.cargarListado(airport);
+        for (Avion avion : aviones) {
+            info.append("\n\tModelo: ").append(avion.getModelo())
+                    .append("\n\tNúmero de asientos: ").append(avion.getNumero_asientos())
+                    .append("\n\tVelocidad máxima: ").append(avion.getVelocidad_maxima())
+                    .append(avion.isActivado() ? "\n\tActivado" : "\n\tDesactivado");
+        }
+
+        if (aeropuerto instanceof AeropuertoPublico) {
+            AeropuertoPublico aeropuertoPublico = (AeropuertoPublico) aeropuerto;
+            info.append("\nPúblico")
+                    .append("\nFinanciación: ").append(aeropuertoPublico.getFinanciacion())
+                    .append("\nNúmero de trabajadores: ").append(aeropuertoPublico.getNum_trabajadores());
+        } else {
+            AeropuertoPrivado aeropuertoPrivado = (AeropuertoPrivado) aeropuerto;
+            info.append("\nPrivado")
+                    .append("\nNúmero de socios: ").append(aeropuertoPrivado.getNumero_socios());
+        }
+
+        return info.toString();
+    }
+
+    /**
+     * Abre una ventana para añadir un nuevo aeropuerto.
      *
      * @param event Evento de acción.
      */
     @FXML
     void aniadirAeropuerto(ActionEvent event) {
-        abrirVentana("/fxml/DatosAeropuerto.fxml", "AVIONES - AÑADIR AEROPUERTO");
-        reloadAirportData();
+        abrirVentana("/fxml/ejercicioL_DatosAeropuerto.fxml", "AVIONES - AÑADIR AEROPUERTO");
     }
 
     /**
-     * Edita un aeropuerto seleccionado.
+     * Abre una ventana para editar el aeropuerto seleccionado.
      *
      * @param event Evento de acción.
      */
     @FXML
     void editarAeropuerto(ActionEvent event) {
-        Aeropuerto aeropuerto = tabla.getSelectionModel().getSelectedItem();
+        Object aeropuerto = tabla.getSelectionModel().getSelectedItem();
         if (aeropuerto == null) {
             alerta("Selecciona un aeropuerto antes de editarlo");
-        } else {
-            abrirVentana("/fxml/DatosAeropuerto.fxml", "AVIONES - EDITAR AEROPUERTO", aeropuerto);
-            reloadAirportData();
+            return;
         }
+        abrirVentanaConAeropuerto("/fxml/ejercicioL_DatosAeropuerto.fxml", "AVIONES - EDITAR AEROPUERTO", aeropuerto);
     }
 
     /**
-     * Borra un aeropuerto seleccionado.
+     * Elimina el aeropuerto seleccionado después de confirmar la acción.
      *
      * @param event Evento de acción.
+     * @throws SQLException si ocurre un error al acceder a la base de datos.
      */
     @FXML
-    void borrarAeropuerto(ActionEvent event) {
-        Aeropuerto aeropuerto = tabla.getSelectionModel().getSelectedItem();
+    void borrarAeropuerto(ActionEvent event) throws SQLException {
+        Object aeropuerto = tabla.getSelectionModel().getSelectedItem();
         if (aeropuerto == null) {
             alerta("Selecciona un aeropuerto antes de eliminarlo");
-        } else {
-            if (confirmarEliminacion()) {
-                eliminarAeropuerto(aeropuerto);
+            return;
+        }
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.initOwner(tabla.getScene().getWindow());
+        alert.setContentText("¿Estás seguro que quieres eliminar ese aeropuerto? Esto también eliminará los aviones en este aeropuerto.");
+
+        if (alert.showAndWait().filter(res -> res == ButtonType.OK).isPresent()) {
+            eliminarAeropuerto(aeropuerto);
+        }
+    }
+
+    /**
+     * Elimina el aeropuerto y sus aviones asociados de la base de datos.
+     *
+     * @param aeropuerto Objeto del aeropuerto a eliminar.
+     * @throws SQLException si ocurre un error al acceder a la base de datos.
+     */
+    private void eliminarAeropuerto(Object aeropuerto) throws SQLException {
+        ObservableList<Avion> aviones = aeropuerto instanceof AeropuertoPublico
+                ? AvionDAO.cargarListado(((AeropuertoPublico) aeropuerto).getAeropuerto())
+                : AvionDAO.cargarListado(((AeropuertoPrivado) aeropuerto).getAeropuerto());
+
+        for (Avion avion : aviones) {
+            if (!AvionDAO.eliminar(avion)) {
+                alerta("No se pudo eliminar ese aeropuerto. Inténtelo de nuevo");
+                return;
             }
         }
-    }
 
-    /**
-     * Muestra información de un aeropuerto seleccionado.
-     *
-     * @param event Evento de acción.
-     */
-    @FXML
-    void infoAeropuerto(ActionEvent event) {
-        Aeropuerto aeropuerto = tabla.getSelectionModel().getSelectedItem();
-        if (aeropuerto == null) {
-            alerta("Selecciona un aeropuerto antes de ver su información");
+        Aeropuerto airport = aeropuerto instanceof AeropuertoPublico
+                ? ((AeropuertoPublico) aeropuerto).getAeropuerto()
+                : ((AeropuertoPrivado) aeropuerto).getAeropuerto();
+
+        if (eliminarAeropuertoEnBD(aeropuerto)) {
+            if (AeropuertoDAO.eliminar(airport)) {
+                if (aeropuerto instanceof AeropuertoPublico) cargarPublicos(); else cargarPrivados();
+                confirmacion("Aeropuerto eliminado correctamente");
+            } else {
+                alerta("No se pudo eliminar ese aeropuerto. Inténtelo de nuevo");
+            }
         } else {
-            mostrarInformacionAeropuerto(aeropuerto);
+            alerta("No se pudo eliminar ese aeropuerto. Inténtelo de nuevo");
         }
     }
 
     /**
-     * Añade un avión a un aeropuerto.
+     * Elimina el aeropuerto en la base de datos.
      *
-     * @param event Evento de acción.
+     * @param aeropuerto Objeto del aeropuerto a eliminar.
+     * @return true si la eliminación fue exitosa, false en caso contrario.
+     * @throws SQLException si ocurre un error al acceder a la base de datos.
      */
-    @FXML
-    void aniadirAvion(ActionEvent event) {
-        abrirVentana("/fxml/AniadirAvion.fxml", "AVIONES - AÑADIR AVIÓN");
+    private boolean eliminarAeropuertoEnBD(Object aeropuerto) throws SQLException {
+        return aeropuerto instanceof AeropuertoPublico
+                ? AeropuertoPublicoDAO.eliminar((AeropuertoPublico) aeropuerto)
+                : AeropuertoPrivadoDAO.eliminar((AeropuertoPrivado) aeropuerto);
     }
 
     /**
-     * Activa o desactiva un avión.
+     * Abre una nueva ventana utilizando el archivo FXML especificado.
      *
-     * @param event Evento de acción.
+     * @param fxmlPath Ruta del archivo FXML.
+     * @param titulo   Título de la ventana.
      */
-    @FXML
-    void activarDesactivarAvion(ActionEvent event) {
-        abrirVentana("/fxml/ActivarDesactivarAvion.fxml", "AVIONES - ACTIVAR/DESACTIVAR AVIÓN");
-    }
-
-    /**
-     * Borra un avión de un aeropuerto.
-     *
-     * @param event Evento de acción.
-     */
-    @FXML
-    void borrarAvion(ActionEvent event) {
-        abrirVentana("/fxml/BorrarAvion.fxml", "AVIONES - BORRAR AVIÓN");
-    }
-
-    /**
-     * Carga la lista de aeropuertos públicos en la tabla.
-     */
-    public void cargarPublicos() {
-        cargarAeropuertos(DaoAeropuertoPublico.cargarListado(), true);
-    }
-
-    /**
-     * Carga la lista de aeropuertos privados en la tabla.
-     */
-    public void cargarPrivados() {
-        cargarAeropuertos(DaoAeropuertoPrivado.cargarListado(), false);
-    }
-
-    /**
-     * Abre una ventana FXML y establece el controlador.
-     *
-     * @param fxmlPath Ruta al archivo FXML.
-     * @param title Título de la ventana.
-     */
-    private void abrirVentana(String fxmlPath, String title) {
-        abrirVentana(fxmlPath, title, null);
-    }
-
-    /**
-     * Abre una ventana FXML y establece el controlador con un aeropuerto seleccionado.
-     *
-     * @param fxmlPath Ruta al archivo FXML.
-     * @param title Título de la ventana.
-     * @param aeropuerto Aeropuerto seleccionado, si existe.
-     */
-    private void abrirVentana(String fxmlPath, String title, Aeropuerto aeropuerto) {
+    private void abrirVentana(String fxmlPath, String titulo) {
         try {
             Window ventana = rbPrivados.getScene().getWindow();
             FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource(fxmlPath));
-            DatosAeropuertoController controlador = new DatosAeropuertoController(aeropuerto);
-            fxmlLoader.setController(controlador);
             Scene scene = new Scene(fxmlLoader.load());
             Stage stage = new Stage();
             stage.setScene(scene);
             stage.getIcons().add(new Image(getClass().getResourceAsStream("/imagenes/avion.png")));
-            stage.setTitle(title);
+            stage.setTitle(titulo);
             stage.initOwner(ventana);
             stage.initModality(Modality.APPLICATION_MODAL);
             stage.showAndWait();
@@ -220,113 +271,121 @@ public class EjercicioL_Aeropuerto_Control implements Initializable {
     }
 
     /**
-     * Recarga la lista de aeropuertos después de añadir o editar.
+     * Abre una nueva ventana con un aeropuerto específico utilizando el archivo FXML.
+     *
+     * @param fxmlPath  Ruta del archivo FXML.
+     * @param titulo    Título de la ventana.
+     * @param aeropuerto Objeto del aeropuerto a editar.
      */
-    private void reloadAirportData() {
-        if (rbPublicos.isSelected()) {
-            cargarPublicos();
-        } else {
-            cargarPrivados();
+    private void abrirVentanaConAeropuerto(String fxmlPath, String titulo, Object aeropuerto) {
+        try {
+            Window ventana = rbPrivados.getScene().getWindow();
+            FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource(fxmlPath));
+            fxmlLoader.setController(new DatosAeropuertoController(aeropuerto));
+            Stage stage = new Stage();
+            stage.setScene(new Scene(fxmlLoader.load()));
+            stage.getIcons().add(new Image(getClass().getResourceAsStream("/imagenes/avion.png")));
+            stage.setTitle(titulo);
+            stage.initOwner(ventana);
+            stage.initModality(Modality.APPLICATION_MODAL);
+            stage.showAndWait();
+        } catch (IOException e) {
+            System.err.println(e.getMessage());
+            alerta("Error abriendo ventana, por favor inténtelo de nuevo");
         }
     }
 
     /**
-     * Confirma la eliminación de un aeropuerto.
+     * Carga la lista de aeropuertos públicos desde la base de datos.
      *
-     * @return true si el usuario confirma, false de lo contrario.
+     * @throws SQLException si ocurre un error al acceder a la base de datos.
      */
-    private boolean confirmarEliminacion() {
-        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-        alert.initOwner(tabla.getScene().getWindow());
-        alert.setHeaderText(null);
-        alert.setTitle("Confirmación");
-        alert.setContentText("¿Estás seguro que quieres eliminar ese aeropuerto? Esto también eliminará los aviones en este aeropuerto.");
-        Optional<ButtonType> result = alert.showAndWait();
-        return result.isPresent() && result.get() == ButtonType.OK;
+    public void cargarPublicos() throws SQLException {
+        limpiarTabla();
+        ObservableList<AeropuertoPublico> aeropuertos = AeropuertoPublicoDAO.cargarListado();
+        masterData.setAll(aeropuertos);
+        tabla.setItems(aeropuertos);
     }
 
     /**
-     * Elimina un aeropuerto seleccionado.
+     * Carga la lista de aeropuertos privados desde la base de datos.
      *
-     * @param aeropuerto Aeropuerto a eliminar.
+     * @throws SQLException si ocurre un error al acceder a la base de datos.
      */
-    private void eliminarAeropuerto(Aeropuerto aeropuerto) {
-        ObservableList<Avion> aviones = DaoAvion.cargarListado(aeropuerto);
-        for (Avion avion : aviones) {
-            if (!DaoAvion.eliminar(avion)) {
-                alerta("No se pudo eliminar ese aeropuerto. Inténtelo de nuevo");
-                return;
+    public void cargarPrivados() throws SQLException {
+        limpiarTabla();
+        ObservableList<AeropuertoPrivado> aeropuertos = AeropuertoPrivadoDAO.cargarListado();
+        masterData.setAll(aeropuertos);
+        tabla.setItems(aeropuertos);
+    }
+
+    /**
+     * Habilita o deshabilita los menús de edición y eliminación dependiendo de si hay un aeropuerto seleccionado.
+     *
+     * @param deshabilitado true si los menús deben ser deshabilitados, false en caso contrario.
+     */
+    public void deshabilitarMenus(boolean deshabilitado) {
+        menuEditarAeropuerto.setDisable(deshabilitado);
+        menuBorrarAeropuerto.setDisable(deshabilitado);
+        menuInfoAeropuerto.setDisable(deshabilitado);
+    }
+
+    /**
+     * Filtra la lista de aeropuertos basada en el texto ingresado en el campo de filtro.
+     */
+    public void filtrar() {
+        String valor = filtroNombre.getText().toLowerCase();
+
+        if (valor.isEmpty()) {
+            tabla.setItems(masterData);
+        } else {
+            filteredData.clear();
+            for (Object aeropuerto : masterData) {
+                String nombre = (aeropuerto instanceof AeropuertoPublico)
+                        ? ((AeropuertoPublico) aeropuerto).getAeropuerto().getNombre()
+                        : ((AeropuertoPrivado) aeropuerto).getAeropuerto().getNombre();
+
+                if (nombre.toLowerCase().contains(valor)) {
+                    filteredData.add(aeropuerto);
+                }
             }
+            tabla.setItems(filteredData);
         }
-        if (aeropuerto instanceof AeropuertoPublico) {
-            DaoAeropuertoPublico.eliminar((AeropuertoPublico) aeropuerto);
-            cargarPublicos();
-        } else {
-            DaoAeropuertoPrivado.eliminar((AeropuertoPrivado) aeropuerto);
-            cargarPrivados();
-        }
-        confirmacion("Aeropuerto eliminado correctamente");
     }
 
     /**
-     * Muestra información sobre un aeropuerto.
+     * Muestra una alerta con un mensaje de error.
      *
-     * @param aeropuerto Aeropuerto cuya información se mostrará.
+     * @param texto El mensaje de error a mostrar.
      */
-    private void mostrarInformacionAeropuerto(Aeropuerto aeropuerto) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("Aeropuerto: ").append(aeropuerto.getNombre()).append("\n");
-        sb.append("Tipo: ").append(aeropuerto instanceof AeropuertoPublico ? "Público" : "Privado").append("\n");
-        sb.append("Ubicación: ").append(aeropuerto.getUbicacion()).append("\n");
-        sb.append("Número de Aviones: ").append(AvionDAO.cargarListado(aeropuerto).size()).append("\n");
-        alerta(sb.toString());
-    }
-
-    /**
-     * Filtra la lista de aeropuertos por el texto introducido en el campo de filtro.
-     */
-    private void filtrar() {
-        String filtro = filtroNombre.getText().toLowerCase();
-        filteredData.setAll(masterData.filtered(aeropuerto ->
-                aeropuerto.getNombre().toLowerCase().contains(filtro)));
-        tabla.setItems(filteredData);
-    }
-
-    /**
-     * Deshabilita los menús de edición e información si no hay un aeropuerto seleccionado.
-     *
-     * @param deshabilitar true para deshabilitar, false para habilitar.
-     */
-    private void deshabilitarMenus(boolean deshabilitar) {
-        menuEditarAeropuerto.setDisable(deshabilitar);
-        menuInfoAeropuerto.setDisable(deshabilitar);
-        menuBorrarAeropuerto.setDisable(deshabilitar);
-    }
-
-    /**
-     * Muestra una alerta con un mensaje específico.
-     *
-     * @param mensaje Mensaje de la alerta.
-     */
-    private void alerta(String mensaje) {
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle("Información");
-        alert.setHeaderText(null);
-        alert.setContentText(mensaje);
-        alert.showAndWait();
+    public void alerta(String texto) {
+        Alert alerta = new Alert(Alert.AlertType.ERROR);
+        alerta.setHeaderText(null);
+        alerta.setTitle("ERROR");
+        alerta.setContentText(texto);
+        alerta.showAndWait();
     }
 
     /**
      * Muestra una alerta de confirmación.
      *
-     * @param mensaje Mensaje de la confirmación.
+     * @param texto El mensaje de confirmación a mostrar.
      */
-    private void confirmacion(String mensaje) {
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle("Confirmación");
-        alert.setHeaderText(null);
-        alert.setContentText(mensaje);
-        alert.showAndWait();
+    public void confirmacion(String texto) {
+        Alert alerta = new Alert(Alert.AlertType.INFORMATION);
+        alerta.setHeaderText(null);
+        alerta.setTitle("Confirmación");
+        alerta.setContentText(texto);
+        alerta.showAndWait();
+    }
+
+    /**
+     * Limpia todos los elementos de la tabla.
+     */
+    private void limpiarTabla() {
+        tabla.getItems().clear();
     }
 }
+
+
 

@@ -1,4 +1,5 @@
 package es.aritzherrero.ejerciciol.DAO;
+
 import es.aritzherrero.ejerciciol.Modelo.Aeropuerto;
 import es.aritzherrero.ejerciciol.Modelo.Direccion;
 import es.aritzherrero.ejerciciol.db.ConexionDB;
@@ -10,21 +11,17 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
-/**
- * Data Access Object para gestionar las entidades Aeropuerto en la base de datos.
- */
 public class AeropuertoDAO {
 
     /**
-     * Recupera un Aeropuerto por su ID desde la base de datos.
+     * Obtiene un aeropuerto a partir de su ID.
      *
-     * @param id el ID del aeropuerto.
-     * @return el objeto Aeropuerto si se encuentra, null en caso contrario.
+     * @param id ID del aeropuerto a buscar.
+     * @return Objeto Aeropuerto si se encuentra en la base de datos, o null si no.
      */
-    public static Aeropuerto getAeropuerto(int id) throws SQLException {
-        ConexionDB connection = null;  // Conexión a la base de datos
-        Aeropuerto aeropuerto = null;   // Variable para almacenar el aeropuerto recuperado
-
+    public static Aeropuerto getAeropuerto(int id) throws SQLException{
+        ConexionDB connection = null;
+        Aeropuerto aeropuerto = null;
         try {
             connection = new ConexionDB();
             String consulta = "SELECT id, nombre, anio_inauguracion, capacidad, id_direccion, imagen FROM aeropuertos WHERE id = ?";
@@ -33,38 +30,35 @@ public class AeropuertoDAO {
             ResultSet rs = pstmt.executeQuery();
 
             if (rs.next()) {
-                // Creación del objeto Aeropuerto a partir de los resultados
-                int idAeropuerto = rs.getInt("id");
-                String nombre = rs.getString("nombre");
-                int anioInauguracion = rs.getInt("anio_inauguracion");
-                int capacidad = rs.getInt("capacidad");
-                int idDireccion = rs.getInt("id_direccion");
-                Direccion direccion = DireccionDAO.getDireccion(idDireccion);
-                Blob imagen = rs.getBlob("imagen");
-
-                aeropuerto = new Aeropuerto(idAeropuerto, nombre, anioInauguracion, capacidad, direccion, imagen);
+                aeropuerto = new Aeropuerto(
+                        rs.getInt("id"),
+                        rs.getString("nombre"),
+                        rs.getInt("anio_inauguracion"),
+                        rs.getInt("capacidad"),
+                        DireccionDAO.getDireccion(rs.getInt("id_direccion")),
+                        rs.getBlob("imagen")
+                );
             }
-
             rs.close();
+            pstmt.close();
         } catch (SQLException e) {
-            System.err.println(e.getMessage());
+            System.err.println(e.getMessage()); // Manejo de error SQL
         } finally {
             if (connection != null) {
-                connection.CloseConexion(); // Cierre de la conexión en el bloque finally
+                connection.CloseConexion();
             }
         }
         return aeropuerto;
     }
 
     /**
-     * Carga una lista de Aeropuertos desde la base de datos.
+     * Carga un listado completo de aeropuertos desde la base de datos.
      *
-     * @return una ObservableList de Aeropuerto.
+     * @return ObservableList con todos los aeropuertos.
      */
     public static ObservableList<Aeropuerto> cargarListado() throws SQLException {
-        ConexionDB connection = null;  // Conexión a la base de datos
-        ObservableList<Aeropuerto> airportList = FXCollections.observableArrayList(); // Lista para almacenar aeropuertos
-
+        ConexionDB connection = null;
+        ObservableList<Aeropuerto> airportList = FXCollections.observableArrayList();
         try {
             connection = new ConexionDB();
             String consulta = "SELECT id, nombre, anio_inauguracion, capacidad, id_direccion, imagen FROM aeropuertos";
@@ -72,40 +66,36 @@ public class AeropuertoDAO {
             ResultSet rs = pstmt.executeQuery();
 
             while (rs.next()) {
-                // Creación del objeto Aeropuerto a partir de los resultados
-                int id = rs.getInt("id");
-                String nombre = rs.getString("nombre");
-                int anioInauguracion = rs.getInt("anio_inauguracion");
-                int capacidad = rs.getInt("capacidad");
-                int idDireccion = rs.getInt("id_direccion");
-                Direccion direccion = DireccionDAO.getDireccion(idDireccion);
-                Blob imagen = rs.getBlob("imagen");
-
-                Aeropuerto airport = new Aeropuerto(id, nombre, anioInauguracion, capacidad, direccion, imagen);
-                airportList.add(airport); // Añadir el aeropuerto a la lista
+                airportList.add(new Aeropuerto(
+                        rs.getInt("id"),
+                        rs.getString("nombre"),
+                        rs.getInt("anio_inauguracion"),
+                        rs.getInt("capacidad"),
+                        DireccionDAO.getDireccion(rs.getInt("id_direccion")),
+                        rs.getBlob("imagen")
+                ));
             }
-
             rs.close();
+            pstmt.close();
         } catch (SQLException e) {
-            System.err.println(e.getMessage());
+            System.err.println(e.getMessage()); // Manejo de error SQL
         } finally {
             if (connection != null) {
-                connection.CloseConexion(); // Cierre de la conexión en el bloque finally
+                connection.CloseConexion();
             }
         }
         return airportList;
     }
 
     /**
-     * Modifica un Aeropuerto existente en la base de datos.
+     * Modifica los datos de un aeropuerto existente en la base de datos.
      *
-     * @param aeropuerto      el Aeropuerto existente a actualizar.
-     * @param aeropuertoNuevo los nuevos datos del Aeropuerto.
+     * @param aeropuerto Objeto Aeropuerto actual.
+     * @param aeropuertoNuevo Objeto Aeropuerto con los nuevos datos.
      * @return true si la actualización fue exitosa, false en caso contrario.
      */
     public static boolean modificar(Aeropuerto aeropuerto, Aeropuerto aeropuertoNuevo) throws SQLException {
-        ConexionDB connection = null; // Conexión a la base de datos
-
+        ConexionDB connection = null;
         try {
             connection = new ConexionDB();
             String consulta = "UPDATE aeropuertos SET nombre = ?, anio_inauguracion = ?, capacidad = ?, id_direccion = ?, imagen = ? WHERE id = ?";
@@ -117,27 +107,28 @@ public class AeropuertoDAO {
             pstmt.setBlob(5, aeropuertoNuevo.getImagen());
             pstmt.setInt(6, aeropuerto.getId());
 
-            int filasAfectadas = pstmt.executeUpdate(); // Ejecutar la actualización
-            return filasAfectadas > 0; // Retornar si se afectaron filas
+            boolean updated = pstmt.executeUpdate() > 0;
+            System.out.println("Actualizada aeropuerto"); // Confirmación en consola
+            pstmt.close();
+            return updated;
         } catch (SQLException e) {
-            System.err.println(e.getMessage());
+            System.err.println(e.getMessage()); // Manejo de error SQL
             return false;
         } finally {
             if (connection != null) {
-                connection.CloseConexion(); // Cierre de la conexión en el bloque finally
+                connection.CloseConexion();
             }
         }
     }
 
     /**
-     * Inserta un nuevo Aeropuerto en la base de datos.
+     * Inserta un nuevo aeropuerto en la base de datos.
      *
-     * @param aeropuerto el Aeropuerto a insertar.
-     * @return el ID generado del nuevo Aeropuerto, o -1 si la inserción falló.
+     * @param aeropuerto Objeto Aeropuerto a insertar.
+     * @return ID del aeropuerto insertado o -1 en caso de error.
      */
     public static int insertar(Aeropuerto aeropuerto) throws SQLException {
-        ConexionDB connection = null; // Conexión a la base de datos
-
+        ConexionDB connection = null;
         try {
             connection = new ConexionDB();
             String consulta = "INSERT INTO aeropuertos (nombre, anio_inauguracion, capacidad, id_direccion, imagen) VALUES (?, ?, ?, ?, ?)";
@@ -148,50 +139,55 @@ public class AeropuertoDAO {
             pstmt.setInt(4, aeropuerto.getDireccion().getId());
             pstmt.setBlob(5, aeropuerto.getImagen());
 
-            int filasAfectadas = pstmt.executeUpdate(); // Ejecutar la inserción
+            int filasAfectadas = pstmt.executeUpdate();
+            System.out.println("Nueva entrada en aeropuerto"); // Confirmación en consola
+
             if (filasAfectadas > 0) {
                 ResultSet rs = pstmt.getGeneratedKeys();
                 if (rs.next()) {
-                    return rs.getInt(1); // Retornar el ID generado
+                    int id = rs.getInt(1);
+                    rs.close();
+                    pstmt.close();
+                    return id;
                 }
             }
-            return -1; // Retornar -1 si la inserción falló
+            pstmt.close();
+            return -1;
         } catch (SQLException e) {
-            System.err.println(e.getMessage());
+            System.err.println(e.getMessage()); // Manejo de error SQL
             return -1;
         } finally {
             if (connection != null) {
-                connection.CloseConexion(); // Cierre de la conexión en el bloque finally
+                connection.CloseConexion();
             }
         }
     }
 
     /**
-     * Elimina un Aeropuerto de la base de datos.
+     * Elimina un aeropuerto de la base de datos.
      *
-     * @param aeropuerto el Aeropuerto a eliminar.
+     * @param aeropuerto Objeto Aeropuerto a eliminar.
      * @return true si la eliminación fue exitosa, false en caso contrario.
      */
     public static boolean eliminar(Aeropuerto aeropuerto) throws SQLException {
-        ConexionDB connection = null; // Conexión a la base de datos
-
+        ConexionDB connection = null;
         try {
             connection = new ConexionDB();
             String consulta = "DELETE FROM aeropuertos WHERE id = ?";
             PreparedStatement pstmt = connection.getConexion().prepareStatement(consulta);
             pstmt.setInt(1, aeropuerto.getId());
 
-            int filasAfectadas = pstmt.executeUpdate(); // Ejecutar la eliminación
-            return filasAfectadas > 0; // Retornar si se afectaron filas
+            boolean deleted = pstmt.executeUpdate() > 0;
+            pstmt.close();
+            System.out.println("Eliminado con éxito"); // Confirmación en consola
+            return deleted;
         } catch (SQLException e) {
-            System.err.println(e.getMessage());
+            System.err.println(e.getMessage()); // Manejo de error SQL
             return false;
         } finally {
             if (connection != null) {
-                connection.CloseConexion(); // Cierre de la conexión en el bloque finally
+                connection.CloseConexion();
             }
         }
     }
 }
-
-
